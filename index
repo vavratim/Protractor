@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Protractor">
+<title>Protractor</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: #000;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  #video {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+  }
+
+  #canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    touch-action: none;
+  }
+
+  /* Camera permission overlay */
+  #permission {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    color: #fff;
+  }
+  #permission .icon { font-size: 56px; }
+  #permission h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+  #permission p { font-size: 14px; color: rgba(255,255,255,0.55); text-align: center; max-width: 260px; line-height: 1.5; }
+  #permission button {
+    margin-top: 8px;
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 36px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: -0.2px;
+  }
+
+  /* Top HUD */
+  #hud {
+    position: fixed;
+    top: env(safe-area-inset-top, 12px);
+    left: 0; right: 0;
+    z-index: 20;
+    display: flex;
+    justify-content: center;
+    padding: 12px 16px 0;
+    pointer-events: none;
+  }
+  .hud-pill {
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 50px;
+    border: 0.5px solid rgba(255,255,255,0.15);
+    padding: 8px 20px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  .hud-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+  .hud-label {
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.45);
+  }
+  .hud-value {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+  .hud-sep {
+    width: 0.5px;
+    height: 28px;
+    background: rgba(255,255,255,0.2);
+  }
+
+  /* Bottom controls */
+  #controls {
+    position: fixed;
+    bottom: 0;
+    left: 0; right: 0;
+    z-index: 20;
+    padding: 12px 16px calc(env(safe-area-inset-bottom, 16px) + 8px);
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    pointer-events: none;
+  }
+  .ctrl-btn {
+    pointer-events: all;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 0.5px solid rgba(255,255,255,0.2);
+    border-radius: 50px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 20px;
+    cursor: pointer;
+    letter-spacing: -0.1px;
+  }
+  .ctrl-btn:active { opacity: 0.6; }
+  .ctrl-btn.active { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
+</style>
+</head>
+<body>
+
+<div id="permission">
+  <div class="icon">📐</div>
+  <h2>Camera Protractor</h2>
+  <p>This app needs camera access to overlay the protractor on your live view.</p>
+  <button id="startBtn">Enable Camera</button>
+</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div class="hud-pill">
+    <div class="hud-item">
+      <div class="hud-label">Between</div>
+      <div class="hud-value" id="hud-between">—</div>
+    </div>
+    <div class="hud-sep"></div>
+    <div class="hud-item">
+      <div class="hud-label">Reflex</div>
+      <div class="hud-value" id="hud-reflex">—</div>
+    </div>
+    <div class="hud-sep"></div>
+    <div class="hud-item" style="color:#5aabff">
+      <div class="hud-label" style="color:#5aabff">Line A</div>
+      <div class="hud-value" id="hud-a" style="color:#5aabff">—</div>
+    </div>
+    <div class="hud-sep"></div>
+    <div class="hud-item">
+      <div class="hud-label" style="color:#ffaa44">Line B</div>
+      <div class="hud-value" id="hud-b" style="color:#ffaa44">—</div>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="ctrl-btn" id="camBtn">🔄 Flip</button>
+  <button class="ctrl-btn" id="resetBtn">↺ Reset</button>
+  <button class="ctrl-btn" id="lockBtn">🔓 Unlock</button>
+  <button class="ctrl-btn" id="sizeBtn">⊙ Size</button>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const permDiv = document.getElementById('permission');
+const startBtn = document.getElementById('startBtn');
+
+let W, H, cx, cy, R;
+let lineA = 120, lineB = 30;
+let dragging = null;
+let facingMode = 'environment';
+let locked = false;
+let sizeIdx = 1;
+const sizes = [0.28, 0.38, 0.50];
+let stream = null;
+let animFrame = null;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+  R = Math.min(W, H) * sizes[sizeIdx];
+}
+
+async function startCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    permDiv.style.display = 'none';
+    loop();
+  } catch(e) {
+    alert('Camera access denied or unavailable: ' + e.message);
+  }
+}
+
+startBtn.addEventListener('click', startCamera);
+document.getElementById('camBtn').addEventListener('click', () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  startCamera();
+});
+document.getElementById('resetBtn').addEventListener('click', () => { lineA = 120; lineB = 30; });
+document.getElementById('lockBtn').addEventListener('click', () => {
+  locked = !locked;
+  document.getElementById('lockBtn').textContent = locked ? '🔒 Locked' : '🔓 Unlock';
+  document.getElementById('lockBtn').classList.toggle('active', locked);
+});
+document.getElementById('sizeBtn').addEventListener('click', () => {
+  sizeIdx = (sizeIdx + 1) % sizes.length;
+  resize();
+});
+
+window.addEventListener('resize', resize);
+resize();
+
+// ---- Drawing ----
+function degNorm(d) { return ((d % 360) + 360) % 360; }
+function toRad(d) { return d * Math.PI / 180; }
+function handlePos(deg) {
+  return { x: cx + R * Math.cos(toRad(deg)), y: cy - R * Math.sin(toRad(deg)) };
+}
+function nearestQ(deg) {
+  const n = degNorm(deg), q = [0, 90, 180, 270];
+  let best = 360;
+  for (let v of q) { let d = Math.abs(v - n); d = Math.min(d, 360-d); if (d < best) best = d; }
+  return best;
+}
+
+function drawSector(s, e, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, r, s, e);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, s, e);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawArcLabel(text, midAngle, r, color) {
+  const x = cx + r * Math.cos(midAngle);
+  const y = cy + r * Math.sin(midAngle);
+  ctx.font = 'bold 13px -apple-system, sans-serif';
+  const m = ctx.measureText(text);
+  const pw = m.width + 10, ph = 20;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  ctx.roundRect(x - pw/2, y - ph/2, pw, ph, 4);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+}
+
+function drawOuterLabel(text, angle, color) {
+  const lr = R + 26;
+  const x = cx + lr * Math.cos(toRad(angle));
+  const y = cy - lr * Math.sin(toRad(angle));
+  ctx.font = 'bold 13px -apple-system, sans-serif';
+  const m = ctx.measureText(text);
+  const pw = m.width + 10, ph = 20;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.beginPath();
+  ctx.roundRect(x - pw/2, y - ph/2, pw, ph, 4);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  const colA = '#5aabff';
+  const colB = '#ffaa44';
+  const colArc = 'rgba(160,130,240,0.7)';
+  const colArcFill = 'rgba(150,120,220,0.18)';
+
+  // Subtle dark vignette ring background
+  const grad = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 1.3);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Protractor ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Tick marks
+  for (let d = 0; d < 360; d += 5) {
+    const rad = toRad(d);
+    const isMajor = d % 30 === 0;
+    const is10 = d % 10 === 0;
+    const inner = isMajor ? R - 18 : is10 ? R - 10 : R - 5;
+    const x1 = cx + R * Math.cos(rad), y1 = cy - R * Math.sin(rad);
+    const x2 = cx + inner * Math.cos(rad), y2 = cy - inner * Math.sin(rad);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.strokeStyle = isMajor ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = isMajor ? 1.5 : 0.75;
+    ctx.stroke();
+    if (isMajor) {
+      const lr = R - 28;
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.font = '10px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(d + '°', cx + lr * Math.cos(rad), cy - lr * Math.sin(rad));
+    }
+  }
+
+  // Cardinals cross
+  ctx.setLineDash([3, 5]);
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Compute
+  const aCanvas = -toRad(lineA);
+  const bCanvas = -toRad(lineB);
+  let diffAB = degNorm(lineB - lineA);
+  const minorAB = diffAB > 180 ? 360 - diffAB : diffAB;
+  const reflexAB = 360 - minorAB;
+
+  const r1 = R * 0.18;
+  const r2 = R * 0.30;
+  const r3 = R * 0.43;
+  const r4 = R * 0.57;
+
+  // Minor arc A↔B
+  {
+    let s = aCanvas, e = bCanvas;
+    let span = e - s; while (span < 0) span += Math.PI*2; while (span > Math.PI*2) span -= Math.PI*2;
+    if (span > Math.PI) { [s,e]=[e,s]; span=Math.PI*2-span; }
+    const mid = s + span/2;
+    drawSector(s, e, r1, 'rgba(150,120,220,0.22)', 'rgba(160,130,240,0.7)');
+    drawArcLabel(minorAB.toFixed(1)+'°', mid, r1, 'rgba(210,190,255,0.95)');
+
+    // Reflex arc
+    const midRef = e + (Math.PI*2 - span)/2;
+    drawSector(e, s + Math.PI*2, r2, 'rgba(150,120,220,0.10)', 'rgba(160,130,240,0.35)');
+    drawArcLabel(reflexAB.toFixed(1)+'°', midRef, r2, 'rgba(180,155,240,0.85)');
+  }
+
+  // Arc: Line A → nearest 90°
+  {
+    const aN = degNorm(lineA), q = [0,90,180,270];
+    let nearQ = q[0], nearDist = 360;
+    for (let v of q) { let d=Math.abs(v-aN); d=Math.min(d,360-d); if(d<nearDist){nearDist=d;nearQ=v;} }
+    const qC = -toRad(nearQ);
+    let s=aCanvas,e=qC;
+    let span=e-s; while(span<0)span+=Math.PI*2; while(span>Math.PI*2)span-=Math.PI*2;
+    if(span>Math.PI){[s,e]=[e,s];span=Math.PI*2-span;}
+    if(span>0.003){
+      const mid=s+span/2;
+      drawSector(s,e,r3,'rgba(90,171,255,0.15)','rgba(90,171,255,0.55)');
+      drawArcLabel(nearDist.toFixed(1)+'°',mid,r3,colA);
+    }
+  }
+
+  // Arc: Line B → nearest 90°
+  {
+    const bN = degNorm(lineB), q = [0,90,180,270];
+    let nearQ = q[0], nearDist = 360;
+    for (let v of q) { let d=Math.abs(v-bN); d=Math.min(d,360-d); if(d<nearDist){nearDist=d;nearQ=v;} }
+    const qC = -toRad(nearQ);
+    let s=bCanvas,e=qC;
+    let span=e-s; while(span<0)span+=Math.PI*2; while(span>Math.PI*2)span-=Math.PI*2;
+    if(span>Math.PI){[s,e]=[e,s];span=Math.PI*2-span;}
+    if(span>0.003){
+      const mid=s+span/2;
+      drawSector(s,e,r4,'rgba(255,170,68,0.15)','rgba(255,170,68,0.55)');
+      drawArcLabel(nearDist.toFixed(1)+'°',mid,r4,colB);
+    }
+  }
+
+  // Lines
+  const hA = handlePos(lineA);
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(hA.x,hA.y);
+  ctx.strokeStyle=colA; ctx.lineWidth=2.5; ctx.stroke();
+
+  const hB = handlePos(lineB);
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(hB.x,hB.y);
+  ctx.strokeStyle=colB; ctx.lineWidth=2.5; ctx.stroke();
+
+  // Center dot
+  ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2);
+  ctx.fillStyle='#fff'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fill();
+
+  // Handles
+  ctx.beginPath(); ctx.arc(hA.x,hA.y,14,0,Math.PI*2);
+  ctx.fillStyle=colA; ctx.fill();
+  ctx.fillStyle='#000'; ctx.font='bold 11px -apple-system,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('A',hA.x,hA.y);
+
+  ctx.beginPath(); ctx.arc(hB.x,hB.y,14,0,Math.PI*2);
+  ctx.fillStyle=colB; ctx.fill();
+  ctx.fillStyle='#000'; ctx.font='bold 11px -apple-system,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('B',hB.x,hB.y);
+
+  // Outer angle labels
+  drawOuterLabel(degNorm(lineA).toFixed(1)+'°', lineA, colA);
+  drawOuterLabel(degNorm(lineB).toFixed(1)+'°', lineB, colB);
+
+  // HUD update
+  document.getElementById('hud-between').textContent = minorAB.toFixed(1)+'°';
+  document.getElementById('hud-reflex').textContent = reflexAB.toFixed(1)+'°';
+  document.getElementById('hud-a').textContent = degNorm(lineA).toFixed(1)+'°';
+  document.getElementById('hud-b').textContent = degNorm(lineB).toFixed(1)+'°';
+}
+
+function loop() {
+  draw();
+  animFrame = requestAnimationFrame(loop);
+}
+
+// Touch / mouse input
+function getAngle(e) {
+  const t = e.touches ? e.touches[0] : e;
+  const rect = canvas.getBoundingClientRect();
+  const px = t.clientX - rect.left, py = t.clientY - rect.top;
+  // canvas is CSS 100vw/100vh but internal size matches
+  const scaleX = W / rect.width, scaleY = H / rect.height;
+  return Math.atan2(cy - py * scaleY, px * scaleX - cx) * 180 / Math.PI;
+}
+
+function whichHandle(e) {
+  if (locked) return null;
+  const t = e.touches ? e.touches[0] : e;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width, scaleY = H / rect.height;
+  const px = (t.clientX - rect.left) * scaleX, py = (t.clientY - rect.top) * scaleY;
+  const hA = handlePos(lineA), hB = handlePos(lineB);
+  const dA = Math.hypot(px - hA.x, py - hA.y);
+  const dB = Math.hypot(px - hB.x, py - hB.y);
+  // Larger hit target for touch
+  const HIT = 40;
+  if (dA < HIT && dA <= dB) return 'A';
+  if (dB < HIT) return 'B';
+  return null;
+}
+
+canvas.addEventListener('mousedown', e => { dragging = whichHandle(e); });
+canvas.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const ang = getAngle(e);
+  if (dragging === 'A') lineA = ang; else lineB = ang;
+});
+canvas.addEventListener('mouseup', () => { dragging = null; });
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  dragging = whichHandle(e);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!dragging) return;
+  const ang = getAngle(e);
+  if (dragging === 'A') lineA = ang; else lineB = ang;
+}, { passive: false });
+canvas.addEventListener('touchend', () => { dragging = null; });
+</script>
+</body>
+</html>
